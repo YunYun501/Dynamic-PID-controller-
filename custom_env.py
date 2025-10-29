@@ -40,13 +40,45 @@ class SoftRobotic(gym.Env):
 
     ## Obervation space 
 
-    x,y     :The position of the end point of the soft robotic arm. 
+    x_arm,y_arm     :The position of the end point of the soft robotic arm. 
         x_real,y_real 
         x_control,y_control 
+
+    x_force_left, x_force_right : The x coordinate of where the force is applied to the soft robotic arm
 
     theta   :The angle of the end point of the soft robotics arm. 
         theta_real 
         theta_control
+
+    theta_dot :The angular velocity of the end point of the soft robotic arm.
+
+    theta_dot_dot :The angular acceleration of the end point of the soft robotic arm.
+
+    tau     :The torque applied to the soft robotic arm.
+
+    force_left, force_right :The force applied to the robotics arm in the +y direction 
+
+    !!! To be implemented !!!
+    KP, KI, KD :The PID controller parameters
+
+    ## Reward function 
+
+    The reward is calulated based on the difference between the position set by the 
+    control signal and the actual position of the robotics arm
+
+    ## Starting state 
+
+    The arm should start at the neutral position 
+
+    The force applied should be zero 
+
+    The control signal should also be zero 
+
+    Or should they start at random positions?
+
+    ## Episode termination
+
+    The episode ends finishing a fixed number of cycles from the control signal 
     
     
 
