@@ -21,7 +21,9 @@ class SoftRobotic(gym.Env):
     - The arm is a simple pendulum hanging from a pivot; gravity restores theta -> 0 (down).
 
     Stage 1 action space
-    - Control only the torque: action = [tau] in [-max_tau, max_tau].
+    - Control left/right actuator forces: action = [F_left, F_right].
+      Forces act in +y (down) and generate actuator torque
+      tau_act = (F_right - F_left) * (actuator_offset * L).
 
     Stage 2 action space (optional)
     - Control PID gains: action = [Kp, Ki, Kd]. The torque is then computed internally as
@@ -41,6 +43,9 @@ class SoftRobotic(gym.Env):
     - [9]  ex            x error (x_target - x_arm)
     - [10] ey            y error (y_target - y_arm)
     - [11] etheta        theta error (theta_target - theta)
+    - [12] p_error       PID proportional error (same as etheta)
+    - [13] i_error       PID integral of theta error
+    - [14] d_error       PID derivative of theta error
 
     Reward
     - Penalizes squared position error plus small control effort and velocity penalties:
@@ -65,14 +70,19 @@ class SoftRobotic(gym.Env):
         mass: float = 1.0,
         gravity: float = 9.81,
         com_ratio: float = 1.0,
+        # Actuation
+        max_force: float = 10.0,
+        actuator_offset: float = 0.5,
         max_tau: float = 2.0,
         theta_limit: float = np.pi / 2,
         # Target/trajectory
         theta_amp: float = 0.5,
         num_cycles: int = 3,
         max_steps: int = 500,
-        # Control mode: "torque" or "pid"
-        control_mode: str = "torque",
+        # Control mode: "forces", "torque" or "pid"
+        control_mode: str = "forces",
+        # If True, append [Kp, Ki, Kd] to the action to allow tuning
+        action_includes_pid: bool = True,
         # PID action ranges (if control_mode == "pid")
         pid_range: Tuple[float, float, float, float, float, float] = (0.0, 20.0, 0.0, 10.0, 0.0, 5.0),
         random_start: bool = False,
@@ -82,7 +92,7 @@ class SoftRobotic(gym.Env):
     ) -> None:
         super().__init__()
 
-        assert control_mode in ("torque", "pid"), "control_mode must be 'torque' or 'pid'"
+        assert control_mode in ("forces", "torque", "pid"), "control_mode must be 'forces', 'torque' or 'pid'"
 
         # Simulation params
         self.dt = float(dt)
@@ -92,10 +102,13 @@ class SoftRobotic(gym.Env):
         self.stiffness = float(stiffness)
         self.mass = float(mass)
         self.g = float(gravity)
+        self.max_force = float(max_force)
         self.max_tau = float(max_tau)
         self.theta_limit = float(theta_limit)
         self.com_ratio = float(com_ratio)
         self.lc = self.L * self.com_ratio  # distance from pivot to CoM
+        self.actuator_offset = float(actuator_offset)  # fraction of L used as lever arm
+        self.action_includes_pid = bool(action_includes_pid)
 
         # Reference trajectory params
         self.theta_amp = float(theta_amp)
@@ -106,6 +119,10 @@ class SoftRobotic(gym.Env):
         self.control_mode = control_mode
         self.pid_low = np.array([pid_range[0], pid_range[2], pid_range[4]], dtype=np.float32)
         self.pid_high = np.array([pid_range[1], pid_range[3], pid_range[5]], dtype=np.float32)
+        # Default PID gains = midpoint of ranges
+        self.Kp = float((self.pid_low[0] + self.pid_high[0]) / 2.0)
+        self.Ki = float((self.pid_low[1] + self.pid_high[1]) / 2.0)
+        self.Kd = float((self.pid_low[2] + self.pid_high[2]) / 2.0)
 
         # RNG
         self.np_random = np.random.default_rng(seed)
@@ -128,14 +145,32 @@ class SoftRobotic(gym.Env):
         self.last_u = 0.0
 
         # Define action space
-        if self.control_mode == "torque":
-            self.action_space = spaces.Box(
-                low=np.array([-self.max_tau], dtype=np.float32),
-                high=np.array([self.max_tau], dtype=np.float32),
-                shape=(1,),
-                dtype=np.float32,
-            )
+        if self.control_mode == "forces":
+            if self.action_includes_pid:
+                low = np.array([0.0, 0.0, *self.pid_low], dtype=np.float32)
+                high = np.array([self.max_force, self.max_force, *self.pid_high], dtype=np.float32)
+                self.action_space = spaces.Box(low=low, high=high, shape=(5,), dtype=np.float32)
+            else:
+                self.action_space = spaces.Box(
+                    low=np.array([0.0, 0.0], dtype=np.float32),
+                    high=np.array([self.max_force, self.max_force], dtype=np.float32),
+                    shape=(2,),
+                    dtype=np.float32,
+                )
+        elif self.control_mode == "torque":
+            if self.action_includes_pid:
+                low = np.array([-self.max_tau, *self.pid_low], dtype=np.float32)
+                high = np.array([self.max_tau, *self.pid_high], dtype=np.float32)
+                self.action_space = spaces.Box(low=low, high=high, shape=(4,), dtype=np.float32)
+            else:
+                self.action_space = spaces.Box(
+                    low=np.array([-self.max_tau], dtype=np.float32),
+                    high=np.array([self.max_tau], dtype=np.float32),
+                    shape=(1,),
+                    dtype=np.float32,
+                )
         else:  # pid
+            # Pure PID torque control using 3 parameters
             self.action_space = spaces.Box(
                 low=self.pid_low,
                 high=self.pid_high,
@@ -148,6 +183,7 @@ class SoftRobotic(gym.Env):
         th_lim = self.theta_limit
         th_dot_lim = 10.0
         th_ddot_lim = 100.0
+        i_err_lim = 10.0
         obs_low = np.array(
             [
                 -L,  # x
@@ -162,6 +198,9 @@ class SoftRobotic(gym.Env):
                 -2 * L,  # ex
                 -L,  # ey
                 -2 * th_lim,  # etheta
+                -2 * th_lim,  # p_error (theta error)
+                -i_err_lim,   # i_error (integral of theta error)
+                -th_dot_lim,  # d_error (derivative of theta error)
             ],
             dtype=np.float32,
         )
@@ -179,6 +218,9 @@ class SoftRobotic(gym.Env):
                 2 * L,
                 L,
                 2 * th_lim,
+                2 * th_lim,
+                i_err_lim,
+                th_dot_lim,
             ],
             dtype=np.float32,
         )
@@ -237,6 +279,10 @@ class SoftRobotic(gym.Env):
         ex = x_ref - x
         ey = y_ref - y
         et = th_ref - self.theta
+        # PID error terms
+        p_err = et
+        d_err = (p_err - self._prev_e) / self.dt
+        i_err = self._int_e
         obs = np.array(
             [
                 x,
@@ -251,6 +297,9 @@ class SoftRobotic(gym.Env):
                 ex,
                 ey,
                 et,
+                p_err,
+                i_err,
+                d_err,
             ],
             dtype=np.float32,
         )
@@ -275,6 +324,10 @@ class SoftRobotic(gym.Env):
             "force_right": float(self.force_right),
             "x_force_left": float(self.x_force_left),
             "x_force_right": float(self.x_force_right),
+            # PID gains for logging
+            "Kp": float(self.Kp),
+            "Ki": float(self.Ki),
+            "Kd": float(self.Kd),
         }
 
     # ----- Gymnasium API -----
@@ -301,23 +354,53 @@ class SoftRobotic(gym.Env):
         return obs, info
 
     def step(self, action: np.ndarray):
-        # Determine torque based on control mode
-        if self.control_mode == "torque":
-            tau_cmd = float(np.asarray(action, dtype=np.float32).reshape(-1)[0])
-            tau = float(np.clip(tau_cmd, -self.max_tau, self.max_tau))
+        # Compute previous PID errors (before action)
+        th_ref_before, _, _ = self._reference(self.step_count)
+        e_before = float(th_ref_before - self.theta)
+        int_before = float(self._int_e)
+        de_before = float((e_before - self._prev_e) / self.dt)
+
+        # Determine actuator torque based on control mode
+        if self.control_mode == "forces":
+            arr = np.asarray(action, dtype=np.float32).reshape(-1)
+            if self.action_includes_pid and arr.size >= 5:
+                F_left_raw, F_right_raw, Kp, Ki, Kd = arr[:5]
+                self.Kp = float(np.clip(Kp, self.pid_low[0], self.pid_high[0]))
+                self.Ki = float(np.clip(Ki, self.pid_low[1], self.pid_high[1]))
+                self.Kd = float(np.clip(Kd, self.pid_low[2], self.pid_high[2]))
+            else:
+                assert arr.size >= 2, "Forces control expects [F_left, F_right] (+ optional Kp,Ki,Kd)"
+                F_left_raw, F_right_raw = arr[:2]
+            F_left = float(np.clip(F_left_raw, 0.0, self.max_force))
+            F_right = float(np.clip(F_right_raw, 0.0, self.max_force))
+            self.force_left = F_left
+            self.force_right = F_right
+            tau = (F_right - F_left) * (self.actuator_offset * self.L)
+            tau = float(np.clip(tau, -self.max_tau, self.max_tau))
+        elif self.control_mode == "torque":
+            arr = np.asarray(action, dtype=np.float32).reshape(-1)
+            if self.action_includes_pid and arr.size >= 4:
+                tau_cmd, Kp, Ki, Kd = arr[:4]
+                self.Kp = float(np.clip(Kp, self.pid_low[0], self.pid_high[0]))
+                self.Ki = float(np.clip(Ki, self.pid_low[1], self.pid_high[1]))
+                self.Kd = float(np.clip(Kd, self.pid_low[2], self.pid_high[2]))
+            else:
+                tau_cmd = arr[0]
+            tau = float(np.clip(float(tau_cmd), -self.max_tau, self.max_tau))
+            self.force_left = 0.0
+            self.force_right = 0.0
         else:
             # PID control: action = [Kp, Ki, Kd]
             gains = np.asarray(action, dtype=np.float32).reshape(-1)
             assert gains.size == 3, "PID control expects 3 parameters [Kp, Ki, Kd]"
             Kp, Ki, Kd = np.clip(gains, self.pid_low, self.pid_high)
+            self.Kp, self.Ki, self.Kd = float(Kp), float(Ki), float(Kd)
 
-            # Error in theta
-            th_ref, _, _ = self._reference(self.step_count)
-            e = float(th_ref - self.theta)
-            de = float(e - self._prev_e) / self.dt
-            self._int_e = float(self._int_e + e * self.dt)
-            tau = float(np.clip(Kp * e + Ki * self._int_e + Kd * de, -self.max_tau, self.max_tau))
-            self._prev_e = e
+            # Compute PID torque using pre-step errors
+            int_tmp = int_before + e_before * self.dt
+            tau = float(np.clip(self.Kp * e_before + self.Ki * int_tmp + self.Kd * de_before, -self.max_tau, self.max_tau))
+            self.force_left = 0.0
+            self.force_right = 0.0
 
         # Integrate dynamics
         self.tau = tau
@@ -326,12 +409,24 @@ class SoftRobotic(gym.Env):
         self.theta, self.theta_dot, self.theta_ddot = theta, theta_dot, theta_ddot
         self.step_count += 1
 
-        # Compute reward (position error + control + velocity penalty)
-        th_ref, x_ref, y_ref = self._reference(self.step_count)
-        x, y = self._kinematics(self.theta)
-        pos_err2 = (x_ref - x) ** 2 + (y_ref - y) ** 2
-        w_pos, w_tau, w_vel = 5.0, 0.01, 0.01
-        reward = -float(w_pos * pos_err2 + w_tau * (self.tau**2) + w_vel * (self.theta_dot**2))
+        # Update PID errors after step
+        th_ref_after, x_ref, y_ref = self._reference(self.step_count)
+        e_after = float(th_ref_after - self.theta)
+        de_after = float((e_after - e_before) / self.dt)
+        int_after = float(int_before + 0.5 * (e_before + e_after) * self.dt)
+        # Commit integrator and last error
+        self._int_e = int_after
+        self._prev_e = e_after
+
+        # Reward: improvement in absolute PID errors
+        w_p, w_i, w_d = 1.0, 0.01, 0.1
+        improv_p = abs(e_before) - abs(e_after)
+        improv_i = abs(int_before) - abs(int_after)
+        improv_d = abs(de_before) - abs(de_after)
+        reward = float(w_p * improv_p + w_i * improv_i + w_d * improv_d)
+        # Small effort penalty
+        w_eff = 0.001
+        reward -= float(w_eff * ((self.force_left / (self.max_force + 1e-8)) ** 2 + (self.force_right / (self.max_force + 1e-8)) ** 2))
 
         # Episode termination/truncation
         terminated = False
