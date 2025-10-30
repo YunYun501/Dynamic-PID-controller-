@@ -1,7 +1,9 @@
 import argparse
+import csv
 import math
 import sys
-
+from pathlib import Path
+from datetime import datetime
 from typing import Optional
 
 import numpy as np
@@ -22,6 +24,7 @@ def run(
     mass: Optional[float] = None,
     gravity: Optional[float] = None,
     com_ratio: Optional[float] = None,
+    out_dir: str = "runs",
 ):
     kwargs = dict(
         render_mode="human",
@@ -38,7 +41,86 @@ def run(
     env = SoftRobotic(**kwargs)
 
     obs, info = env.reset()
-    print("SoftRobotic demo running — close the window or Ctrl+C to exit.")
+    print("SoftRobotic demo running - close the window or Ctrl+C to exit.")
+
+    # Prepare logging (per-episode)
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    obs_headers = [
+        "x",
+        "y",
+        "theta",
+        "theta_dot",
+        "theta_ddot",
+        "tau",
+        "x_target",
+        "y_target",
+        "theta_target",
+        "ex",
+        "ey",
+        "etheta",
+    ]
+
+    def start_episode_log():
+        return {"t": [], "step": [], **{name: [] for name in obs_headers}}
+
+    def append_log(log, t_val, step_idx, obs_vec):
+        log["t"].append(float(t_val))
+        log["step"].append(int(step_idx))
+        for i, name in enumerate(obs_headers):
+            log[name].append(float(obs_vec[i]))
+
+    def persist_episode(ep_idx, log):
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base = out_path / f"episode_{ep_idx:03d}_{ts}"
+        csv_file = base.with_suffix(".csv")
+        png_file = base.with_suffix(".png")
+
+        # Write CSV with headers
+        with open(csv_file, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["t", "step"] + obs_headers)
+            for i in range(len(log["t"])):
+                row = [log["t"][i], log["step"][i]] + [log[name][i] for name in obs_headers]
+                writer.writerow(row)
+
+        # Plot observations over time
+        try:
+            import matplotlib.pyplot as plt
+            cols = 3
+            rows = int(math.ceil(len(obs_headers) / cols))
+            fig, axes = plt.subplots(rows, cols, figsize=(cols * 4.2, rows * 2.6), sharex=True)
+            # Normalize axes to 2D array
+            if rows == 1:
+                axes = np.array([axes])
+            t_arr = np.array(log["t"], dtype=float)
+            for idx, name in enumerate(obs_headers):
+                r, c = divmod(idx, cols)
+                ax = axes[r, c]
+                ax.plot(t_arr, np.array(log[name], dtype=float))
+                ax.set_title(name)
+                ax.grid(True, alpha=0.3)
+            # Hide any unused axes
+            total = rows * cols
+            for k in range(len(obs_headers), total):
+                r, c = divmod(k, cols)
+                axes[r, c].axis("off")
+            axes[rows - 1, 0].set_xlabel("time (s)")
+            fig.suptitle(f"SoftRobotic observations — episode {ep_idx}")
+            fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+            fig.savefig(png_file, dpi=120)
+            plt.close(fig)
+        except Exception as e:
+            print(f"Plotting skipped (matplotlib missing or error): {e}")
+
+        print(f"Saved CSV: {csv_file}")
+        print(f"Saved plot: {png_file}")
+
+    episode_idx = 1
+    ep_log = start_episode_log()
+    ep_step = 0
+    append_log(ep_log, t_val=ep_step * env.dt, step_idx=ep_step, obs_vec=obs)
+
     try:
         for i in range(steps):
             if control_mode == "torque":
@@ -54,7 +136,16 @@ def run(
             env.render()
 
             if terminated or truncated:
+                # End of episode: save and reset
+                persist_episode(episode_idx, ep_log)
+                episode_idx += 1
                 obs, info = env.reset()
+                ep_log = start_episode_log()
+                ep_step = 0
+                append_log(ep_log, t_val=ep_step * env.dt, step_idx=ep_step, obs_vec=obs)
+            else:
+                ep_step += 1
+                append_log(ep_log, t_val=ep_step * env.dt, step_idx=ep_step, obs_vec=obs)
 
     except KeyboardInterrupt:
         pass
@@ -68,6 +159,7 @@ def parse_args(argv):
     p.add_argument("--steps", type=int, default=2000, help="Number of steps to simulate")
     p.add_argument("--screen-dim", type=int, default=600, help="Window size in pixels")
     p.add_argument("--random-start", action="store_true", help="Start from a random small angle")
+    p.add_argument("--out-dir", type=str, default="runs", help="Directory to save CSV and plots")
     # Torque-mode params
     p.add_argument("--tau-amp", type=float, default=1.0, help="Torque amplitude (Nm)")
     p.add_argument("--tau-freq", type=float, default=0.5, help="Torque frequency (Hz)")
@@ -97,4 +189,6 @@ if __name__ == "__main__":
         mass=args.mass,
         gravity=args.gravity,
         com_ratio=args.com_ratio,
+        out_dir=args.out_dir,
     )
+
