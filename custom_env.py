@@ -70,6 +70,10 @@ class SoftRobotic(gym.Env):
         mass: float = 1.0,
         gravity: float = 9.81,
         com_ratio: float = 1.0,
+        # Inertia augmentation from a uniform rod about the pivot
+        include_rod_inertia: bool = True,
+        rod_mass: Optional[float] = None,
+        rod_inertia_factor: float = 1.0 / 3.0,
         # Actuation
         max_force: float = 10.0,
         actuator_offset: float = 0.5,
@@ -102,6 +106,9 @@ class SoftRobotic(gym.Env):
         self.stiffness = float(stiffness)
         self.mass = float(mass)
         self.g = float(gravity)
+        self.include_rod_inertia = bool(include_rod_inertia)
+        self.rod_mass = float(rod_mass) if rod_mass is not None else self.mass
+        self.rod_inertia_factor = float(rod_inertia_factor)
         self.max_force = float(max_force)
         self.max_tau = float(max_tau)
         self.theta_limit = float(theta_limit)
@@ -109,6 +116,9 @@ class SoftRobotic(gym.Env):
         self.lc = self.L * self.com_ratio  # distance from pivot to CoM
         self.actuator_offset = float(actuator_offset)  # fraction of L used as lever arm
         self.action_includes_pid = bool(action_includes_pid)
+
+        # Effective rotational inertia: base I + rod contribution (about pivot)
+        self.I_eff = self.I + (self.rod_inertia_factor * self.rod_mass * (self.L ** 2) if self.include_rod_inertia else 0.0)
 
         # Reference trajectory params
         self.theta_amp = float(theta_amp)
@@ -263,7 +273,7 @@ class SoftRobotic(gym.Env):
         """
         # Gravitational torque tends to restore theta -> 0 (downward)
         tau_g = - self.mass * self.g * self.lc * np.sin(self.theta)
-        theta_ddot = (tau + tau_g - self.damping * self.theta_dot - self.stiffness * self.theta) / self.I
+        theta_ddot = (tau + tau_g - self.damping * self.theta_dot - self.stiffness * self.theta) / self.I_eff
         theta_dot = self.theta_dot + self.dt * theta_ddot
         theta = self.theta + self.dt * theta_dot
 
@@ -328,6 +338,8 @@ class SoftRobotic(gym.Env):
             "Kp": float(self.Kp),
             "Ki": float(self.Ki),
             "Kd": float(self.Kd),
+            # Effective inertia used
+            "I_eff": float(self.I_eff),
         }
 
     # ----- Gymnasium API -----

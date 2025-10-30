@@ -12,12 +12,12 @@ from custom_env import SoftRobotic
 
 
 def run(
-    control_mode: str = "forces",
-    steps: int = 1000,
+    control_mode: str = "pid",
+    steps: int = 10000,
     screen_dim: int = 600,
     tau_amp: float = 1.0,
     tau_freq: float = 0.5,
-    kp: float = 10.0,
+    kp: float = 5.0,
     ki: float = 0.5,
     kd: float = 1.0,
     random_start: bool = False,
@@ -73,7 +73,7 @@ def run(
         "d_error",
     ]
 
-    extra_headers = ["kp", "ki", "kd", "reward", "reward_cum"]
+    extra_headers = ["kp", "ki", "kd", "reward", "reward_cum", "force_left", "force_right"]
 
     def start_episode_log():
         d = {"t": [], "step": []}
@@ -81,7 +81,7 @@ def run(
             d[name] = []
         return d
 
-    def append_log(log, t_val, step_idx, obs_vec, kp=None, ki=None, kd=None, reward=None, reward_cum=None):
+    def append_log(log, t_val, step_idx, obs_vec, kp=None, ki=None, kd=None, reward=None, reward_cum=None, force_left=None, force_right=None):
         log["t"].append(float(t_val))
         log["step"].append(int(step_idx))
         for i, name in enumerate(obs_headers):
@@ -107,6 +107,14 @@ def run(
         else:
             prev = 0.0 if step_idx == 0 else float(log["reward_cum"][-1])
             log["reward_cum"].append(prev)
+        if force_left is not None:
+            log["force_left"].append(float(force_left))
+        else:
+            log["force_left"].append(0.0 if step_idx == 0 else float(log["force_left"][-1]))
+        if force_right is not None:
+            log["force_right"].append(float(force_right))
+        else:
+            log["force_right"].append(0.0 if step_idx == 0 else float(log["force_right"][-1]))
 
     def persist_episode(ep_idx, log):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -161,7 +169,8 @@ def run(
     ret = 0.0
     append_log(ep_log, t_val=ep_step * env.dt, step_idx=ep_step, obs_vec=obs,
                kp=getattr(env, 'Kp', None), ki=getattr(env, 'Ki', None), kd=getattr(env, 'Kd', None),
-               reward=0.0, reward_cum=ret)
+               reward=0.0, reward_cum=ret,
+               force_left=getattr(env, 'force_left', 0.0), force_right=getattr(env, 'force_right', 0.0))
 
     # Gain tuning helpers
     rng = np.random.default_rng()
@@ -224,12 +233,14 @@ def run(
                 ret = 0.0
                 append_log(ep_log, t_val=ep_step * env.dt, step_idx=ep_step, obs_vec=obs,
                            kp=getattr(env, 'Kp', None), ki=getattr(env, 'Ki', None), kd=getattr(env, 'Kd', None),
-                           reward=0.0, reward_cum=ret)
+                           reward=0.0, reward_cum=ret,
+                           force_left=getattr(env, 'force_left', 0.0), force_right=getattr(env, 'force_right', 0.0))
             else:
                 ep_step += 1
                 append_log(ep_log, t_val=ep_step * env.dt, step_idx=ep_step, obs_vec=obs,
                            kp=getattr(env, 'Kp', None), ki=getattr(env, 'Ki', None), kd=getattr(env, 'Kd', None),
-                           reward=reward, reward_cum=ret)
+                           reward=reward, reward_cum=ret,
+                           force_left=getattr(env, 'force_left', 0.0), force_right=getattr(env, 'force_right', 0.0))
 
     except KeyboardInterrupt:
         pass
