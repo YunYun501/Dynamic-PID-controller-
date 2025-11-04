@@ -189,4 +189,9 @@ def run(
     except KeyboardInterrupt:
         pass
     finally:
+        # Save any remaining data even if simulation was interrupted
+        if ep_step > 0:  # Only save if we have data
+            persist_episode(episode_idx, ep_log, control_mode, sinusoidal_magnitude, 
+                          sinusoidal_frequency, position_action, velocity_action, 
+                          acceleration_action, decision_log, out_path, env)
         env.close()

@@ -11,7 +11,7 @@ def parse_args(argv):
     p.add_argument("--random-start", action="store_true", help="Start from a random small angle")
     p.add_argument("--out-dir", type=str, default="output", help="Directory to save CSV and plots")
     # Sinusoidal trajectory parameters
-    p.add_argument("--sinusoidal-magnitude", type=float, default=1.0, help="Magnitude of sinusoidal reference trajectory")
+    p.add_argument("--sinusoidal-magnitude", type=float, default=0.5, help="Magnitude of sinusoidal reference trajectory")
     p.add_argument("--sinusoidal-frequency", type=float, default=0.2, help="Frequency of sinusoidal reference trajectory (Hz)")
     # Action parameters for each control mode
     p.add_argument("--position-action", type=float, default=0.0, help="Base position action value")

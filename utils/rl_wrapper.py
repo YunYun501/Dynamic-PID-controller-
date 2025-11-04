@@ -94,9 +94,9 @@ class SoftRoboticRLWrapper(gym.Wrapper):
                 scaled_action = float(action[0]) * 100.0
                 return np.array([scaled_action], dtype=np.float32)
             else:  # force control
-                # Scale from [-1, 1] to [-100, 100] for both forces
-                scaled_left = float(action[0]) * 100.0
-                scaled_right = float(action[1]) * 100.0
+                # Scale from [-1, 1] to [-1000, 1000] for both forces
+                scaled_left = float(action[0]) * 1000.0
+                scaled_right = float(action[1]) * 1000.0
                 return np.array([scaled_left, scaled_right], dtype=np.float32)
         else:
             # "absolute" - use action as-is
