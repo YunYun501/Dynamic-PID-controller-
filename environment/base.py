@@ -71,7 +71,7 @@ class SoftRoboticBase(gym.Env):
         """
         super().__init__()
 
-        assert control_mode in ("position", "velocity", "acceleration"), "control_mode must be 'position', 'velocity' or 'acceleration'"
+        assert control_mode in ("position", "velocity", "acceleration", "force"), "control_mode must be 'position', 'velocity', 'acceleration' or 'force'"
 
         # Simulation parameters
         self.time_step = float(time_step)
@@ -111,6 +111,12 @@ class SoftRoboticBase(gym.Env):
         self.right_actuator_force = 0.0
         self.left_force_x_position = -0.5 * self.arm_length
         self.right_force_x_position = 0.5 * self.arm_length
+        
+        # Object handling (for force control mode)
+        self.object_mass = 0.0  # Mass of object being manipulated
+        self.object_attached = False
+        self.last_left_force = 0.0
+        self.last_right_force = 0.0
 
         # Render parameters
         self.render_mode = render_mode
@@ -137,11 +143,19 @@ class SoftRoboticBase(gym.Env):
                 shape=(1,),
                 dtype=np.float32,
             )
-        else:  # acceleration
+        elif self.control_mode == "acceleration":
             self.action_space = spaces.Box(
                 low=-100.0,
                 high=100.0,
                 shape=(1,),
+                dtype=np.float32,
+            )
+        else:  # force control
+            # Action space: [left_force, right_force]
+            self.action_space = spaces.Box(
+                low=-self.maximum_torque * 10,
+                high=self.maximum_torque * 10,
+                shape=(2,),
                 dtype=np.float32,
             )
 

@@ -27,6 +27,8 @@ def run(
     position_action: float = 0.0,
     velocity_action: float = 0.0,
     acceleration_action: float = 0.0,
+    # Object manipulation parameters
+    object_mass: float = 0.0,
 ):
     kwargs = dict(
         render_mode="human",
@@ -43,6 +45,10 @@ def run(
     if com_ratio is not None:
         kwargs["center_of_mass_ratio"] = float(com_ratio)
     env = SoftRobotic(**kwargs)
+    
+    # Attach object if specified
+    if object_mass > 0:
+        env.attach_object(object_mass)
 
     obs, info = env.reset()
     print("SoftRobotic demo running - close the window or Ctrl+C to exit.")
@@ -163,10 +169,16 @@ def run(
                 # Velocity control: action is target angular velocity
                 action_value = velocity_action + sinusoidal_magnitude * math.sin(2.0 * math.pi * sinusoidal_frequency * t)
                 action = np.array([action_value], dtype=np.float32)
-            else:  # acceleration
+            elif control_mode == "acceleration":
                 # Acceleration control: action is target angular acceleration
                 action_value = acceleration_action + sinusoidal_magnitude * math.sin(2.0 * math.pi * sinusoidal_frequency * t)
                 action = np.array([action_value], dtype=np.float32)
+            else:  # force control
+                # Force control: action is [left_force, right_force]
+                # For demo purposes, we'll use sinusoidal forces
+                left_force = sinusoidal_magnitude * math.sin(2.0 * math.pi * sinusoidal_frequency * t)
+                right_force = sinusoidal_magnitude * math.sin(2.0 * math.pi * sinusoidal_frequency * t + math.pi/4)
+                action = np.array([left_force, right_force], dtype=np.float32)
 
             obs, reward, terminated, truncated, info = env.step(action)
             ret += float(reward)
@@ -197,7 +209,7 @@ def run(
 
 def parse_args(argv):
     p = argparse.ArgumentParser(description="Run the SoftRobotic environment visual demo.")
-    p.add_argument("--mode", choices=["position", "velocity", "acceleration"], default="position", help="Control mode")
+    p.add_argument("--mode", choices=["position", "velocity", "acceleration", "force"], default="position", help="Control mode")
     p.add_argument("--steps", type=int, default=2000, help="Number of steps to simulate")
     p.add_argument("--screen-dim", type=int, default=600, help="Window size in pixels")
     p.add_argument("--random-start", action="store_true", help="Start from a random small angle")
@@ -213,6 +225,8 @@ def parse_args(argv):
     p.add_argument("--mass", type=float, default=None, help="Mass for gravity torque (kg)")
     p.add_argument("--gravity", type=float, default=None, help="Gravity acceleration (m/s^2)")
     p.add_argument("--com-ratio", type=float, default=None, help="Center of mass ratio of L (0..1)")
+    # Object manipulation
+    p.add_argument("--object-mass", type=float, default=0.0, help="Mass of object to manipulate (kg)")
     return p.parse_args(argv)
 
 
@@ -232,4 +246,5 @@ if __name__ == "__main__":
         position_action=args.position_action,
         velocity_action=args.velocity_action,
         acceleration_action=args.acceleration_action,
+        object_mass=args.object_mass,
     )

@@ -4,12 +4,12 @@ import numpy as np
 class Actions:
     """Handles action processing for the soft robotic arm."""
     
-    def process_action(self, control_mode, action, step_count, arm_angle, angular_velocity, time_step, arm_mass, gravitational_acceleration, distance_from_pivot_to_center_of_mass, effective_moment_of_inertia, damping_coefficient, stiffness_coefficient, maximum_torque, kinematics, sinusoidal_magnitude, sinusoidal_frequency):
+    def process_action(self, control_mode, action, step_count, arm_angle, angular_velocity, time_step, arm_mass, gravitational_acceleration, distance_from_pivot_to_center_of_mass, effective_moment_of_inertia, damping_coefficient, stiffness_coefficient, maximum_torque, kinematics, sinusoidal_magnitude, sinusoidal_frequency, left_force_x_position, right_force_x_position):
         """
         Process the action based on the control mode.
         
         Args:
-            control_mode: Control mode ("position", "velocity", or "acceleration")
+            control_mode: Control mode ("position", "velocity", "acceleration", or "force")
             action: Control action (1D array with control signal)
             step_count: Current step count
             arm_angle: Current arm angle
@@ -25,22 +25,27 @@ class Actions:
             kinematics: Kinematics object
             sinusoidal_magnitude: Magnitude of sinusoidal trajectory
             sinusoidal_frequency: Frequency of sinusoidal trajectory
+            left_force_x_position: X position of left actuator
+            right_force_x_position: X position of right actuator
             
         Returns:
-            float: Torque to apply
+            tuple: (torque, left_force, right_force) - torque to apply and forces (None for non-force modes)
         """
-        control_signal = float(action[0])
+        # Initialize forces to None for non-force control modes
+        left_force = None
+        right_force = None
         
         # Determine torque based on control mode
         if control_mode == "position":
             # Position control: drive towards target angle using proportional control
-            theta_reference, _, _ = kinematics.calculate_reference_trajectory(
-                step_count, time_step, sinusoidal_magnitude, sinusoidal_frequency)
+            control_signal = float(action[0])
+            theta_reference = control_signal
             angle_error = theta_reference - arm_angle
             torque = 10.0 * angle_error
             torque = float(np.clip(torque, -maximum_torque, maximum_torque))
         elif control_mode == "velocity":
             # Velocity control: compute required torque to achieve target velocity
+            control_signal = float(action[0])
             target_velocity = control_signal
             gravitational_torque = - arm_mass * gravitational_acceleration * distance_from_pivot_to_center_of_mass * np.sin(arm_angle)
             torque = effective_moment_of_inertia * (target_velocity - angular_velocity) / time_step + \
@@ -48,8 +53,9 @@ class Actions:
                      stiffness_coefficient * arm_angle - \
                      gravitational_torque
             torque = float(np.clip(torque, -maximum_torque, maximum_torque))
-        else:  # acceleration
+        elif control_mode == "acceleration":
             # Acceleration control: compute required torque to achieve target acceleration
+            control_signal = float(action[0])
             target_acceleration = control_signal
             gravitational_torque = - arm_mass * gravitational_acceleration * distance_from_pivot_to_center_of_mass * np.sin(arm_angle)
             torque = effective_moment_of_inertia * target_acceleration + \
@@ -57,5 +63,15 @@ class Actions:
                      stiffness_coefficient * arm_angle - \
                      gravitational_torque
             torque = float(np.clip(torque, -maximum_torque, maximum_torque))
+        else:  # force control
+            # Force control: directly set left and right actuator forces
+            left_force = float(action[0])
+            right_force = float(action[1])
             
-        return torque
+            # Calculate torque from forces applied at different x positions
+            # Torque = force * lever_arm (perpendicular distance)
+            left_torque = left_force * left_force_x_position
+            right_torque = right_force * right_force_x_position
+            torque = left_torque + right_torque
+            
+        return float(torque), left_force, right_force
