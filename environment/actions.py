@@ -4,6 +4,11 @@ import numpy as np
 class Actions:
     """Handles action processing for the soft robotic arm."""
     
+    def __init__(self):
+        # Initialize PID controller state
+        self.prev_error = 0.0
+        self.integral = 0.0
+    
     def process_action(self, control_mode, action, step_count, arm_angle, angular_velocity, time_step, arm_mass, gravitational_acceleration, distance_from_pivot_to_center_of_mass, effective_moment_of_inertia, damping_coefficient, stiffness_coefficient, maximum_torque, kinematics, sinusoidal_magnitude, sinusoidal_frequency, left_force_x_position, right_force_x_position):
         """
         Process the action based on the control mode.
@@ -35,14 +40,27 @@ class Actions:
         left_force = None
         right_force = None
         
-        # Determine torque based on control mode
+# Determine torque based on control mode
         if control_mode == "position":
-            # Position control: drive towards target angle using proportional control
+            # Position control: drive towards target angle using PID control
             control_signal = float(action[0])
             theta_reference = control_signal
             angle_error = theta_reference - arm_angle
-            torque = 10.0 * angle_error
+            
+            # PID controller
+            self.integral += angle_error * time_step
+            derivative = (angle_error - self.prev_error) / time_step if time_step > 0 else 0.0
+            
+            # PID gains
+            Kp = 100.0  # Proportional gain
+            Ki = 10.0   # Integral gain
+            Kd = 20.0   # Derivative gain
+            
+            torque = Kp * angle_error + Ki * self.integral + Kd * derivative
             torque = float(np.clip(torque, -maximum_torque, maximum_torque))
+            
+            # Update previous error
+            self.prev_error = angle_error
         elif control_mode == "velocity":
             # Velocity control: compute required torque to achieve target velocity
             control_signal = float(action[0])

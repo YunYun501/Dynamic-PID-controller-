@@ -20,6 +20,10 @@ class SoftRobotic(SoftRoboticBase):
         self.actions = Actions()
         self.renderer = Rendering()
         
+        # Reset PID controller state
+        self.actions.prev_error = 0.0
+        self.actions.integral = 0.0
+        
         # For object manipulation tasks
         self.object_mass = 0.0
         self.object_attached = False
@@ -91,6 +95,10 @@ class SoftRobotic(SoftRoboticBase):
         self.last_left_force = 0.0
         self.last_right_force = 0.0
         self.last_action = None
+        
+        # Reset PID controller state
+        self.actions.prev_error = 0.0
+        self.actions.integral = 0.0
 
         observation = self._get_observation()
         information = self._get_information()

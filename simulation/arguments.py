@@ -12,7 +12,7 @@ def parse_args(argv):
     p.add_argument("--out-dir", type=str, default="runs", help="Directory to save CSV and plots")
     # Sinusoidal trajectory parameters
     p.add_argument("--sinusoidal-magnitude", type=float, default=0.5, help="Magnitude of sinusoidal reference trajectory")
-    p.add_argument("--sinusoidal-frequency", type=float, default=0.2, help="Frequency of sinusoidal reference trajectory (Hz)")
+    p.add_argument("--sinusoidal-frequency", type=float, default=0.7, help="Frequency of sinusoidal reference trajectory (Hz)")
     # Action parameters for each control mode
     p.add_argument("--position-action", type=float, default=0.0, help="Base position action value")
     p.add_argument("--velocity-action", type=float, default=0.0, help="Base velocity action value")

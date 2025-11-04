@@ -52,7 +52,7 @@ def persist_episode(ep_idx, log, control_mode, sinusoidal_magnitude, sinusoidal_
                    position_action, velocity_action, acceleration_action, decision_log, 
                    out_path, env):
     """Save episode data to CSV, JSON, and plot files."""
-    from simulation.visualization import plot_observations
+    from simulation.visualization import plot_observations, plot_tracking_performance
     
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     base = out_path / f"episode_{ep_idx:03d}_{ts}"
@@ -118,6 +118,12 @@ def persist_episode(ep_idx, log, control_mode, sinusoidal_magnitude, sinusoidal_
         
     # Plot observations
     plot_observations(log, env, ep_idx, png_file)
+    
+    # Plot tracking performance
+    try:
+        plot_tracking_performance(log, ep_idx, base)
+    except Exception as e:
+        print(f"Warning: Could not generate tracking plot: {e}")
 
     print(f"Saved CSV: {csv_file}")
     print(f"Saved analysis: {analysis_file}")

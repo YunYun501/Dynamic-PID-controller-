@@ -15,7 +15,7 @@ from simulation.visualization import plot_observations
 
 def run(
     control_mode: str = "position",
-    steps: int = 10000,
+    steps: int = 2000,
     screen_dim: int = 600,
     random_start: bool = False,
     mass: Optional[float] = None,
@@ -111,23 +111,47 @@ def run(
     try:
         for i in range(steps):
             # For all control modes, we can use a sinusoidal action or a fixed action
-            t = i * env.time_step
+            # Calculate the reference trajectory using the environment's method for consistency
+            theta_ref, x_ref, y_ref = env.kinematics.calculate_reference_trajectory(
+                i, env.time_step, sinusoidal_magnitude, sinusoidal_frequency)
+            
             action_value = None
             if control_mode == "position":
                 # Position control: action is target angle
-                action_value = position_action + sinusoidal_magnitude * math.sin(2.0 * math.pi * sinusoidal_frequency * t)
+                action_value = position_action + theta_ref
                 action = np.array([action_value], dtype=np.float32)
             elif control_mode == "velocity":
                 # Velocity control: action is target angular velocity
-                action_value = velocity_action + sinusoidal_magnitude * math.sin(2.0 * math.pi * sinusoidal_frequency * t)
+                # Calculate velocity from the reference trajectory
+                if i > 0:
+                    prev_theta_ref, _, _ = env.kinematics.calculate_reference_trajectory(
+                        i-1, env.time_step, sinusoidal_magnitude, sinusoidal_frequency)
+                    target_velocity = (theta_ref - prev_theta_ref) / env.time_step
+                else:
+                    target_velocity = 0.0
+                action_value = velocity_action + target_velocity
                 action = np.array([action_value], dtype=np.float32)
             elif control_mode == "acceleration":
                 # Acceleration control: action is target angular acceleration
-                action_value = acceleration_action + sinusoidal_magnitude * math.sin(2.0 * math.pi * sinusoidal_frequency * t)
+                # Calculate acceleration from the reference trajectory
+                if i > 1:
+                    prev_theta_ref, _, _ = env.kinematics.calculate_reference_trajectory(
+                        i-1, env.time_step, sinusoidal_magnitude, sinusoidal_frequency)
+                    prev_prev_theta_ref, _, _ = env.kinematics.calculate_reference_trajectory(
+                        i-2, env.time_step, sinusoidal_magnitude, sinusoidal_frequency)
+                    target_acceleration = (theta_ref - 2*prev_theta_ref + prev_prev_theta_ref) / (env.time_step**2)
+                elif i > 0:
+                    prev_theta_ref, _, _ = env.kinematics.calculate_reference_trajectory(
+                        i-1, env.time_step, sinusoidal_magnitude, sinusoidal_frequency)
+                    target_acceleration = (theta_ref - prev_theta_ref) / (env.time_step**2)
+                else:
+                    target_acceleration = 0.0
+                action_value = acceleration_action + target_acceleration
                 action = np.array([action_value], dtype=np.float32)
             else:  # force control
                 # Force control: action is [left_force, right_force]
                 # For demo purposes, we'll use sinusoidal forces
+                t = i * env.time_step
                 left_force = sinusoidal_magnitude * math.sin(2.0 * math.pi * sinusoidal_frequency * t)
                 right_force = sinusoidal_magnitude * math.sin(2.0 * math.pi * sinusoidal_frequency * t + math.pi/4)
                 action = np.array([left_force, right_force], dtype=np.float32)
