@@ -33,7 +33,7 @@ class SoftRoboticBase(gym.Env):
         rod_inertia_factor: float = 1.0 / 3.0,
         maximum_torque: float = 2.0,
         theta_limit: float = np.pi / 2,
-        maximum_steps: int = 500,
+        maximum_steps: int = 2000,
         control_mode: str = "position",
         sinusoidal_magnitude: float = 0.5,
         sinusoidal_frequency: float = 0.5,
@@ -61,7 +61,7 @@ class SoftRoboticBase(gym.Env):
             maximum_torque: Maximum torque that can be applied (N*m)
             theta_limit: Limit for arm angle (radians)
             maximum_steps: Maximum steps per episode
-            control_mode: Control mode ("position", "velocity", or "acceleration")
+            control_mode: Control mode ("position", "velocity" or "acceleration")
             sinusoidal_magnitude: Magnitude of sinusoidal reference trajectory
             sinusoidal_frequency: Frequency of sinusoidal reference trajectory (Hz)
             random_start: Whether to start with random initial conditions
@@ -71,7 +71,7 @@ class SoftRoboticBase(gym.Env):
         """
         super().__init__()
 
-        assert control_mode in ("position", "velocity", "acceleration", "force"), "control_mode must be 'position', 'velocity', 'acceleration' or 'force'"
+        assert control_mode in ("position", "velocity", "acceleration", "force"), "control_mode must be 'position', 'velocity' or 'acceleration' or 'force'"
 
         # Simulation parameters
         self.time_step = float(time_step)
@@ -153,8 +153,8 @@ class SoftRoboticBase(gym.Env):
         else:  # force control
             # Action space: [left_force, right_force]
             self.action_space = spaces.Box(
-                low=-self.maximum_torque * 10,
-                high=self.maximum_torque * 10,
+                low=-100.0,
+                high=100.0,
                 shape=(2,),
                 dtype=np.float32,
             )

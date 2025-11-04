@@ -116,18 +116,31 @@ def run(
                 row = [log["t"][i], log["step"][i]] + [log[name][i] for name in obs_headers + extra_headers]
                 writer.writerow(row)
 
-        # Plot observations over time
+# Plot observations over time
         try:
             import matplotlib.pyplot as plt
+            
+            # Select only essential headers for plotting based on control mode
+            essential_headers = ["theta", "theta_dot", "tau", "reward"]
+            
+            # Add force information for force control mode
+            if env.control_mode == "force":
+                essential_headers.extend(["force_left", "force_right"])
+            else:
+                # Add target information for other control modes
+                essential_headers.append("theta_target")
+            
+            # Add cumulative reward
+            essential_headers.append("reward_cum")
+            
             cols = 3
-            plot_headers = obs_headers + extra_headers
-            rows = int(math.ceil(len(plot_headers) / cols))
+            rows = int(math.ceil(len(essential_headers) / cols))
             fig, axes = plt.subplots(rows, cols, figsize=(cols * 4.2, rows * 2.6), sharex=True)
             # Normalize axes to 2D array
             if rows == 1:
                 axes = np.array([axes])
             t_arr = np.array(log["t"], dtype=float)
-            for idx, name in enumerate(plot_headers):
+            for idx, name in enumerate(essential_headers):
                 r, c = divmod(idx, cols)
                 ax = axes[r, c]
                 ax.plot(t_arr, np.array(log[name], dtype=float))
@@ -135,7 +148,7 @@ def run(
                 ax.grid(True, alpha=0.3)
             # Hide any unused axes
             total = rows * cols
-            for k in range(len(plot_headers), total):
+            for k in range(len(essential_headers), total):
                 r, c = divmod(k, cols)
                 axes[r, c].axis("off")
             axes[rows - 1, 0].set_xlabel("time (s)")
@@ -210,13 +223,13 @@ def run(
 def parse_args(argv):
     p = argparse.ArgumentParser(description="Run the SoftRobotic environment visual demo.")
     p.add_argument("--mode", choices=["position", "velocity", "acceleration", "force"], default="position", help="Control mode")
-    p.add_argument("--steps", type=int, default=2000, help="Number of steps to simulate")
+    p.add_argument("--steps", type=int, default=5000, help="Number of steps to simulate")
     p.add_argument("--screen-dim", type=int, default=600, help="Window size in pixels")
     p.add_argument("--random-start", action="store_true", help="Start from a random small angle")
     p.add_argument("--out-dir", type=str, default="runs", help="Directory to save CSV and plots")
     # Sinusoidal trajectory parameters
     p.add_argument("--sinusoidal-magnitude", type=float, default=0.5, help="Magnitude of sinusoidal reference trajectory")
-    p.add_argument("--sinusoidal-frequency", type=float, default=0.5, help="Frequency of sinusoidal reference trajectory (Hz)")
+    p.add_argument("--sinusoidal-frequency", type=float, default=0.2, help="Frequency of sinusoidal reference trajectory (Hz)")
     # Action parameters for each control mode
     p.add_argument("--position-action", type=float, default=0.0, help="Base position action value")
     p.add_argument("--velocity-action", type=float, default=0.0, help="Base velocity action value")

@@ -132,8 +132,27 @@ class Rendering:
         gfxdraw.aapolygon(env.surface, rotated_vertical, (204, 77, 77))
         gfxdraw.filled_polygon(env.surface, rotated_vertical, (204, 77, 77))
 
-        # Target position marker
-        theta_reference = env.sinusoidal_magnitude * np.sin(2 * np.pi * env.sinusoidal_frequency * env.step_count * env.time_step)
+# Target position marker
+        if hasattr(env, 'last_action') and env.last_action is not None:
+            # Use the control signal as target for position control mode
+            if env.control_mode == "position":
+                theta_reference = float(env.last_action[0])
+            elif env.control_mode == "velocity":
+                # For velocity control, integrate to get target position
+                # This is a simplified approximation
+                theta_reference = env.arm_angle + float(env.last_action[0]) * env.time_step
+            elif env.control_mode == "acceleration":
+                # For acceleration control, integrate twice to get target position
+                # This is a simplified approximation
+                velocity_change = float(env.last_action[0]) * env.time_step
+                theta_reference = env.arm_angle + (env.angular_velocity + velocity_change/2) * env.time_step
+            else:  # force control
+                # For force control, use sinusoidal reference as fallback
+                theta_reference = env.sinusoidal_magnitude * np.sin(2 * np.pi * env.sinusoidal_frequency * env.step_count * env.time_step)
+        else:
+            # Fallback to sinusoidal reference
+            theta_reference = env.sinusoidal_magnitude * np.sin(2 * np.pi * env.sinusoidal_frequency * env.step_count * env.time_step)
+            
         # Calculate target position of end of lower T (end of its vertical bar)
         # The end is now at the connection point (bottom tip of upper T)
         target_end_x = offset_x + t_height * np.sin(theta_reference)

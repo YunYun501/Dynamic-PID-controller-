@@ -25,6 +25,7 @@ class SoftRobotic(SoftRoboticBase):
         self.object_attached = False
         self.last_left_force = 0.0
         self.last_right_force = 0.0
+        self.last_action = None
     
     def attach_object(self, mass: float):
         """Attach an object of given mass to the end of the arm."""
@@ -89,6 +90,7 @@ class SoftRobotic(SoftRoboticBase):
         self.right_actuator_force = 0.0
         self.last_left_force = 0.0
         self.last_right_force = 0.0
+        self.last_action = None
 
         observation = self._get_observation()
         information = self._get_information()
@@ -96,6 +98,9 @@ class SoftRobotic(SoftRoboticBase):
 
     def step(self, action):
         """Execute one time step in the environment."""
+        # Store action for reward calculation
+        self.last_action = action
+        
         # Process action to determine torque and forces
         result = self.actions.process_action(
             self.control_mode, action, self.step_count, self.arm_angle, 
@@ -178,8 +183,25 @@ class SoftRobotic(SoftRoboticBase):
             # Overall reward
             reward = grip_reward - force_change_penalty - energy_penalty
         else:
-            # For other control modes, use the original reward function
-            theta_reference, _, _ = self._calculate_reference_trajectory(self.step_count)
+            # For other control modes, use the appropriate reward function
+            if hasattr(self, 'last_action') and self.last_action is not None:
+                # Use the action as the target for reward calculation
+                if self.control_mode == "position":
+                    theta_reference = float(self.last_action[0])
+                elif self.control_mode == "velocity":
+                    # For velocity control, we don't have a specific angle target
+                    # Use sinusoidal reference for consistency
+                    theta_reference, _, _ = self._calculate_reference_trajectory(self.step_count)
+                elif self.control_mode == "acceleration":
+                    # For acceleration control, we don't have a specific angle target
+                    # Use sinusoidal reference for consistency
+                    theta_reference, _, _ = self._calculate_reference_trajectory(self.step_count)
+                else:
+                    theta_reference, _, _ = self._calculate_reference_trajectory(self.step_count)
+            else:
+                # Fallback to sinusoidal reference
+                theta_reference, _, _ = self._calculate_reference_trajectory(self.step_count)
+            
             theta_error = float(theta_reference - self.arm_angle)
             reward = -abs(theta_error)
             reward -= 0.01 * (self.torque_applied ** 2)
