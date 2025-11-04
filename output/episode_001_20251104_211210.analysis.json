@@ -1,0 +1,32 @@
+{
+  "episode": 1,
+  "control_mode": "force",
+  "total_steps": 11,
+  "timestamp": "20251104_211210",
+  "parameters": {
+    "sinusoidal_magnitude": 600.0,
+    "sinusoidal_frequency": 0.2,
+    "position_action": 0.0,
+    "velocity_action": 0.0,
+    "acceleration_action": 0.0
+  },
+  "final_state": {
+    "theta": 1.5707963705062866,
+    "theta_dot": 10.0,
+    "theta_target": 149.21392822265625,
+    "error": 147.6431427001953,
+    "cumulative_reward": -1219.172592366302
+  },
+  "performance_metrics": {
+    "max_error": 147.6431427001953,
+    "avg_error": 74.10849085721102,
+    "max_torque": 212.1320343017578,
+    "avg_torque": 182.12488625266334
+  },
+  "force_metrics": {
+    "max_force_left": 134.5624542236328,
+    "max_force_right": 508.60675048828125,
+    "avg_force_left": 61.3977575302124,
+    "avg_force_right": 425.6475275213068
+  }
+}
