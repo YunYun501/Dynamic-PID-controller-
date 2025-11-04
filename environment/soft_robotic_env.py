@@ -1,9 +1,9 @@
-from environment.base import SoftRoboticBase
-from environment.kinematics import Kinematics
-from environment.dynamics import Dynamics
-from environment.observations import Observations
-from environment.actions import Actions
-from environment.rendering import Rendering
+from .base import SoftRoboticBase
+from .kinematics import Kinematics
+from .dynamics import Dynamics
+from .observations import Observations
+from .actions import Actions
+from .rendering import Rendering
 import numpy as np
 
 
@@ -154,13 +154,31 @@ class SoftRobotic(SoftRoboticBase):
         return observation, reward, terminated, truncated, information
 
     def _calculate_reward(self):
-        """Calculate improved reward function for force control tasks."""
+        """Calculate improved reward function suitable for reinforcement learning."""
+        # Extract observation data
+        observation = self._get_observation()
+        theta_error = observation[11]  # etheta
+        theta_dot = observation[3]     # theta_dot
+        
+        # Base tracking reward
+        tracking_reward = -abs(theta_error)
+        
+        # Add velocity penalty for smoother movements
+        velocity_penalty = -0.01 * abs(theta_dot)
+        
+        # Add energy penalty
+        energy_penalty = -0.001 * (self.torque_applied ** 2)
+        
+        # Add smoothness penalty (torque changes)
+        torque_change_penalty = 0.0
+        if hasattr(self, 'last_torque_applied'):
+            torque_change = abs(self.torque_applied - self.last_torque_applied)
+            torque_change_penalty = -0.005 * torque_change
+            
+        # For force control mode, include force-related rewards
+        force_reward = 0.0
         if self.control_mode == "force":
-            # Primary reward: Object manipulation success (maintaining grip)
-            grip_reward = 0.0
-
-            # If we're simulating object pickup, reward for maintaining appropriate forces
-            # to hold the object without dropping it or applying excessive force
+            # Object manipulation rewards (if object is attached)
             if self.object_attached and self.object_mass > 0:
                 # Reward for maintaining balanced forces (good grip)
                 force_balance = abs(self.left_actuator_force - self.right_actuator_force)
@@ -168,52 +186,27 @@ class SoftRobotic(SoftRoboticBase):
                 
                 if total_force > 0:
                     balance_reward = 1.0 - min(force_balance / total_force, 1.0)
-                    grip_reward += balance_reward
+                    force_reward += balance_reward
                 
                 # Reward for sufficient force to hold object
                 min_force = self.object_mass * self.gravitational_acceleration * 0.6  # 60% safety margin
                 if total_force >= min_force:
-                    grip_reward += 1.0
+                    force_reward += 1.0
                 else:
                     # Penalize insufficient force
-                    grip_reward -= (min_force - total_force) / min_force
+                    force_reward -= (min_force - total_force) / min_force
 
             # Stability reward: Penalize excessive force changes
             force_change_penalty = 0.0
             if self.step_count > 1:  # Only apply after first step
                 left_force_change = abs(self.left_actuator_force - self.last_left_force)
                 right_force_change = abs(self.right_actuator_force - self.last_right_force)
-                force_change_penalty = 0.01 * (left_force_change + right_force_change)
+                force_change_penalty = 0.005 * (left_force_change + right_force_change)
+            force_reward -= force_change_penalty
 
-            # Energy efficiency: Penalize excessive force magnitude
-            energy_penalty = 0.001 * (self.left_actuator_force**2 + self.right_actuator_force**2)
-
-            # Overall reward
-            reward = grip_reward - force_change_penalty - energy_penalty
-        else:
-            # For other control modes, use the appropriate reward function
-            if hasattr(self, 'last_action') and self.last_action is not None:
-                # Use the action as the target for reward calculation
-                if self.control_mode == "position":
-                    theta_reference = float(self.last_action[0])
-                elif self.control_mode == "velocity":
-                    # For velocity control, we don't have a specific angle target
-                    # Use sinusoidal reference for consistency
-                    theta_reference, _, _ = self._calculate_reference_trajectory(self.step_count)
-                elif self.control_mode == "acceleration":
-                    # For acceleration control, we don't have a specific angle target
-                    # Use sinusoidal reference for consistency
-                    theta_reference, _, _ = self._calculate_reference_trajectory(self.step_count)
-                else:
-                    theta_reference, _, _ = self._calculate_reference_trajectory(self.step_count)
-            else:
-                # Fallback to sinusoidal reference
-                theta_reference, _, _ = self._calculate_reference_trajectory(self.step_count)
-            
-            theta_error = float(theta_reference - self.arm_angle)
-            reward = -abs(theta_error)
-            reward -= 0.01 * (self.torque_applied ** 2)
-            
+        # Overall reward
+        reward = tracking_reward + velocity_penalty + energy_penalty + torque_change_penalty + force_reward
+        
         return float(reward)
 
     def render(self):

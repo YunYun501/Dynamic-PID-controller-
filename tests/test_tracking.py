@@ -2,7 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
-from soft_robotic_env import SoftRobotic
+import sys
+import os
+
+# Add the project root to the path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+from environment.soft_robotic_env import SoftRobotic
 
 def run_tracking_test():
     # Create environment
@@ -44,8 +51,10 @@ def run_tracking_test():
     print(f"Average tracking error: {avg_error:.4f}")
     print(f"Maximum tracking error: {max_error:.4f}")
 
-    # Create plots directory
-    plots_dir = Path("plots")
+    # Create output directory
+    output_dir = Path("output")
+    output_dir.mkdir(exist_ok=True)
+    plots_dir = output_dir / "plots"
     plots_dir.mkdir(exist_ok=True)
     
     # Generate timestamp for unique filenames

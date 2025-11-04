@@ -8,7 +8,7 @@ from typing import Optional
 
 import numpy as np
 
-from soft_robotic_env import SoftRobotic
+from environment.soft_robotic_env import SoftRobotic
 from simulation.logging import start_episode_log, append_log, persist_episode
 from simulation.visualization import plot_observations
 
@@ -21,7 +21,8 @@ def run(
     mass: Optional[float] = None,
     gravity: Optional[float] = None,
     com_ratio: Optional[float] = None,
-    out_dir: str = "runs",
+    out_dir: str = "output",
+    render_mode: str = "human",
     # Sinusoidal control parameters
     sinusoidal_magnitude: float = 0.5,
     sinusoidal_frequency: float = 0.5,
@@ -33,9 +34,9 @@ def run(
     object_mass: float = 0.0,
 ):
     kwargs = dict(
-        render_mode="human",
+        render_mode=render_mode,
         control_mode=control_mode,
-        screen_dimension=screen_dim,
+        screen_dimension=screen_dim if render_mode is not None else 0,
         random_start=random_start,
         sinusoidal_magnitude=sinusoidal_magnitude,
         sinusoidal_frequency=sinusoidal_frequency,
@@ -53,7 +54,8 @@ def run(
         env.attach_object(object_mass)
 
     obs, info = env.reset()
-    print("SoftRobotic demo running - close the window or Ctrl+C to exit.")
+    if render_mode is not None:
+        print("SoftRobotic demo running - close the window or Ctrl+C to exit.")
 
     # Prepare logging (per-episode)
     out_path = Path(out_dir)
@@ -158,7 +160,8 @@ def run(
 
             obs, reward, terminated, truncated, info = env.step(action)
             ret += float(reward)
-            env.render()
+            if env.render_mode is not None:
+                env.render()
             
             # Log decision for agent evaluation
             log_decision(i, action, obs, reward, info, action_value)

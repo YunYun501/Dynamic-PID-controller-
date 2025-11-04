@@ -10,7 +10,7 @@ test_log = {
 }
 
 # Test the plot generation
-output_dir = Path("plots/test")
+output_dir = Path("output/plots/test")
 output_dir.mkdir(parents=True, exist_ok=True)
 output_file = output_dir / "test_tracking"
 

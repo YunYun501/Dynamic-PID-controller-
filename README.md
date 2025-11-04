@@ -185,6 +185,24 @@ Dynamic-PID-controller-/
 - Plot generation testing
 - Error handling verification
 
+### `rl_wrapper.py`
+**Main Function**: RL-friendly wrapper for the SoftRobotic environment.
+
+**Key Features**:
+- Multiple reward types (shaped, sparse, multi-objective)
+- Action transformations (absolute, delta, normalized)
+- Exploration bonuses and smoothness rewards
+- Better reward shaping for reinforcement learning
+
+### `rl_test.py`
+**Main Function**: Demonstrates RL-friendly environment enhancements.
+
+**Key Features**:
+- Comparison of different reward types
+- Action transformation demonstrations
+- RL vs. traditional control comparison
+- Performance metrics for learning
+
 ## Usage Examples
 
 ### Basic Simulation
@@ -201,6 +219,31 @@ python run_sim.py --mode velocity --velocity-action 0.5 --sinusoidal-magnitude 0
 ```bash
 python run_sim.py --mode force --object-mass 0.5 --steps 2000
 ```
+
+### RL-Enhanced Environment
+```bash
+python simple_rl_test.py
+python rl_test.py
+```
+
+## Reinforcement Learning Features
+
+The environment now includes RL-friendly enhancements:
+
+### Reward Functions
+- **Shaped Rewards**: Multi-component rewards for smooth learning
+- **Sparse Rewards**: Task-completion based rewards
+- **Multi-Objective Rewards**: Weighted combination of objectives
+
+### Action Transformations
+- **Absolute Actions**: Direct control signals
+- **Delta Actions**: Changes to current targets (better exploration)
+- **Normalized Actions**: Scaled actions for consistent learning
+
+### Exploration Features
+- Exploration bonuses for visiting new states
+- Smoothness rewards to encourage stable policies
+- Energy efficiency considerations
 
 ## Development Guidelines
 

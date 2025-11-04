@@ -138,8 +138,8 @@ class SoftRoboticBase(gym.Env):
             )
         elif self.control_mode == "velocity":
             self.action_space = spaces.Box(
-                low=-10.0,
-                high=10.0,
+                low=-100.0,
+                high=100.0,
                 shape=(1,),
                 dtype=np.float32,
             )
@@ -153,8 +153,8 @@ class SoftRoboticBase(gym.Env):
         else:  # force control
             # Action space: [left_force, right_force]
             self.action_space = spaces.Box(
-                low=-100.0,
-                high=100.0,
+                low=-1000.0,
+                high=1000.0,
                 shape=(2,),
                 dtype=np.float32,
             )

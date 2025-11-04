@@ -26,8 +26,10 @@ def generate_tracking_plot_from_csv(csv_file):
         avg_error = np.mean(tracking_error)
         max_error = np.max(tracking_error)
         
-        # Create plots directory
-        plots_dir = Path("plots")
+        # Create output directory
+        output_dir = Path("output")
+        output_dir.mkdir(exist_ok=True)
+        plots_dir = output_dir / "plots"
         plots_dir.mkdir(exist_ok=True)
         
         # Generate tracking performance plot
@@ -74,12 +76,12 @@ def main():
     """Generate tracking plots for all CSV files."""
     print("Generating tracking plots from existing CSV files...")
     
-    # Find all CSV files in runs directory
-    runs_dir = Path("runs")
-    csv_files = list(runs_dir.glob("**/*.csv"))
+    # Find all CSV files in output directory
+    output_dir = Path("output")
+    csv_files = list(output_dir.glob("**/*.csv"))
     
     if not csv_files:
-        print("No CSV files found in runs directory")
+        print("No CSV files found in output directory")
         return
         
     print(f"Found {len(csv_files)} CSV files")

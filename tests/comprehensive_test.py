@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from soft_robotic_env import SoftRobotic
+from environment.soft_robotic_env import SoftRobotic
 
 def test_position_control():
     """Test position control tracking performance."""
