@@ -1,0 +1,432 @@
+SOFT ROBOTIC ARM CONTROL SYSTEM - FILE ANALYSIS
+================================================
+
+This document describes the role of each Python file in the environment and the functions they contain.
+
+================================================================================
+ENVIRONMENT MODULE (environment/)
+================================================================================
+
+1. environment/__init__.py
+--------------------------
+Role: Package initialization file that exports the main environment components.
+
+Functions/Classes Exported:
+- SoftRoboticBase: Base environment class
+- Kinematics: Kinematic calculations handler
+- Dynamics: Dynamic calculations handler
+- Observations: Observation generation handler
+- Actions: Action processing handler
+- Rendering: Rendering handler
+
+
+2. environment/base.py
+-----------------------
+Role: Defines the base Gymnasium environment for the soft robotic arm with multiple control modes.
+
+Classes:
+- SoftRoboticBase(gym.Env): Base class for soft robotic environment
+
+Functions:
+- __init__(): Initializes the environment with parameters like render mode, time step, arm length,
+  moment of inertia, damping/stiffness coefficients, control mode (position/velocity/acceleration/force),
+  and various physical parameters. Sets up action and observation spaces based on control mode.
+
+
+3. environment/actions.py
+--------------------------
+Role: Handles action processing and converts control signals to torques for different control modes.
+
+Classes:
+- Actions: Action processor with PID controller state
+
+Functions:
+- __init__(): Initializes PID controller state (prev_error, integral)
+
+- process_action(): Processes the action based on control mode and returns torque.
+  Parameters: control_mode, action, step_count, arm_angle, angular_velocity, time_step,
+              arm_mass, gravitational_acceleration, distance_from_pivot_to_center_of_mass,
+              effective_moment_of_inertia, damping_coefficient, stiffness_coefficient,
+              maximum_torque, kinematics, sinusoidal_magnitude, sinusoidal_frequency,
+              left_force_x_position, right_force_x_position
+  Returns: (torque, left_force, right_force)
+  
+  Behavior by control mode:
+  - Position mode: Uses PID controller (Kp=100, Ki=10, Kd=20) to track target angle
+  - Velocity mode: Computes torque to achieve target angular velocity
+  - Acceleration mode: Computes torque to achieve target angular acceleration
+  - Force mode: Directly converts left/right actuator forces to torque
+
+
+4. environment/dynamics.py
+---------------------------
+Role: Handles dynamic calculations for the soft robotic arm, including physics integration.
+
+Classes:
+- Dynamics: Dynamic calculator
+
+Functions:
+- calculate_dynamics(): Integrates rotational dynamics using semi-implicit Euler method.
+  Parameters: torque, arm_angle, angular_velocity, time_step, arm_mass,
+              gravitational_acceleration, distance_from_pivot_to_center_of_mass,
+              damping_coefficient, stiffness_coefficient, effective_moment_of_inertia,
+              theta_limit, object_mass, arm_length
+  Returns: (arm_angle_new, angular_velocity_new, angular_acceleration)
+  
+  Calculates gravitational torque from both arm and any attached object, computes
+  angular acceleration, updates velocity and position, then clamps values to limits.
+
+
+5. environment/kinematics.py
+-----------------------------
+Role: Handles kinematic calculations including forward kinematics and reference trajectories.
+
+Classes:
+- Kinematics: Kinematic calculator
+
+Functions:
+- __init__(): Initializes with arm_length parameter
+
+- calculate_reference_trajectory(): Computes sinusoidal reference targets.
+  Parameters: step, time_step, sinusoidal_magnitude, sinusoidal_frequency
+  Returns: (theta_target, x_target, y_target)
+  Generates sinusoidal angle trajectory: theta = magnitude * sin(2π * frequency * t)
+
+- calculate_kinematics(): Computes end-effector position from angle.
+  Parameters: arm_angle
+  Returns: (x_position, y_position)
+  Converts angle to Cartesian coordinates: x = L*sin(θ), y = L*cos(θ)
+
+
+6. environment/observations.py
+-------------------------------
+Role: Handles observation generation and information dictionary creation for the environment.
+
+Classes:
+- Observations: Observation generator
+
+Functions:
+- get_observation(): Generates the current observation vector.
+  Parameters: kinematics, step_count, arm_angle, angular_velocity, angular_acceleration,
+              torque_applied, time_step, sinusoidal_magnitude, sinusoidal_frequency
+  Returns: numpy array with 12 elements:
+    [x_position, y_position, arm_angle, angular_velocity, angular_acceleration,
+     torque_applied, x_reference, y_reference, theta_reference,
+     x_error, y_error, theta_error]
+
+- get_information(): Generates detailed state information dictionary.
+  Parameters: kinematics, step_count, arm_angle, angular_velocity, angular_acceleration,
+              torque_applied, time_step, sinusoidal_magnitude, sinusoidal_frequency,
+              left_actuator_force, right_actuator_force, left_force_x_position,
+              right_force_x_position, effective_moment_of_inertia
+  Returns: Dictionary with keys: step, theta, theta_dot, theta_ddot, tau, x, y,
+           theta_target, x_target, y_target, force_left, force_right,
+           x_force_left, x_force_right, I_eff
+
+
+7. environment/rendering.py
+----------------------------
+Role: Handles visualization of the soft robotic arm using pygame with T-shaped joint components.
+
+Classes:
+- Rendering: Renderer for the environment
+
+Functions:
+- render(): Renders the current state of the environment with T-shaped components.
+  Parameters: env (the environment object)
+  Returns: None (human mode) or RGB array (rgb_array mode)
+  
+  Draws:
+  - Fixed upper T-shape (base)
+  - Dynamic lower T-shape (rotates with arm angle)
+  - Target position marker (green circle)
+  - Torque indicator (clockwise icon or colored circle)
+  - Connection point (pivot)
+  
+  Handles both "human" and "rgb_array" render modes.
+
+
+================================================================================
+SIMULATION MODULE (simulation/)
+================================================================================
+
+8. simulation/__init__.py
+--------------------------
+Role: Empty initialization file for the simulation package.
+
+
+9. simulation/arguments.py
+---------------------------
+Role: Parses command-line arguments for simulation configuration.
+
+Functions:
+- parse_args(): Parses command line arguments.
+  Parameters: argv (argument list)
+  Returns: argparse.Namespace with arguments
+  
+  Available arguments:
+  - --mode: Control mode (position/velocity/acceleration/force)
+  - --steps: Number of simulation steps
+  - --screen-dim: Window size in pixels
+  - --random-start: Start from random angle
+  - --out-dir: Output directory for CSV/plots
+  - --sinusoidal-magnitude/frequency: Reference trajectory parameters
+  - --position/velocity/acceleration-action: Base action values
+  - --mass/gravity/com-ratio: Physical parameter overrides
+  - --object-mass: Mass of object to manipulate
+
+
+10. simulation/logging.py
+--------------------------
+Role: Handles logging of episode data to CSV and JSON files.
+
+Functions:
+- start_episode_log(): Initialize a new episode log dictionary.
+  Parameters: obs_headers, extra_headers
+  Returns: Dictionary with empty lists for each header plus "t" and "step"
+
+- append_log(): Append data to the episode log.
+  Parameters: log, t_val, step_idx, obs_vec, reward, reward_cum, force_left, force_right
+  Adds a new row of data to all log lists.
+
+- persist_episode(): Save episode data to CSV, JSON, and plot files.
+  Parameters: ep_idx, log, control_mode, sinusoidal_magnitude, sinusoidal_frequency,
+              position_action, velocity_action, acceleration_action, decision_log,
+              out_path, env
+  
+  Creates:
+  - CSV file with full episode data
+  - Analysis JSON with performance metrics
+  - Decisions JSON with detailed control decisions
+  - Observation plot PNG
+  - Tracking performance plot PNG
+
+
+11. simulation/runner.py
+-------------------------
+Role: Main simulation runner that executes episodes and coordinates logging.
+
+Functions:
+- run(): Main simulation loop.
+  Parameters: control_mode, steps, screen_dim, random_start, mass, gravity,
+              com_ratio, out_dir, sinusoidal_magnitude, sinusoidal_frequency,
+              position_action, velocity_action, acceleration_action, object_mass
+  
+  Executes simulation with specified parameters, handles action generation based on
+  control mode, logs all data, and saves results when episodes complete.
+
+- log_decision(): (nested function) Log detailed control decisions for agent evaluation.
+  Parameters: step, action, obs, reward, info, action_value
+  Records timestamped decision entries with action, observation, and reward info.
+
+
+12. simulation/visualization.py
+--------------------------------
+Role: Creates matplotlib plots for episode analysis.
+
+Functions:
+- plot_observations(): Plot observations over time and save to file.
+  Parameters: ep_log, env, ep_idx, png_file
+  Creates multi-subplot figure showing essential metrics (theta, theta_dot, tau, reward,
+  and mode-specific metrics like forces or targets).
+
+- plot_tracking_performance(): Plot tracking performance comparison.
+  Parameters: ep_log, ep_idx, png_file_base
+  Creates 2-subplot figure:
+  - Top: Actual vs target theta over time
+  - Bottom: Tracking error over time with statistics (avg/max error)
+
+
+================================================================================
+TOP-LEVEL FILES
+================================================================================
+
+13. run_sim.py
+--------------
+Role: Main entry point for running simulations from command line.
+
+Functions:
+- main (implicit): Parses command-line arguments using simulation.arguments.parse_args()
+  and calls simulation.runner.run() with the parsed parameters.
+
+
+14. soft_robotic_env.py
+------------------------
+Role: Main environment class that integrates all components into a complete Gymnasium environment.
+
+Classes:
+- SoftRobotic(SoftRoboticBase): Complete soft robotic arm environment
+
+Functions:
+- __init__(): Initializes all component classes (Kinematics, Dynamics, Observations,
+  Actions, Rendering) and sets up PID controller state.
+
+- attach_object(): Attach an object of given mass to the arm.
+  Parameters: mass
+  Sets object_mass and object_attached flag.
+
+- detach_object(): Remove any attached object.
+  Resets object_mass to 0 and object_attached flag to False.
+
+- _calculate_reference_trajectory(): Backward compatibility wrapper for kinematics method.
+  Parameters: step
+  Returns: (theta_reference, x_reference, y_reference)
+
+- _calculate_kinematics(): Backward compatibility wrapper for kinematics method.
+  Parameters: arm_angle
+  Returns: (x_position, y_position)
+
+- _calculate_dynamics(): Backward compatibility wrapper for dynamics method.
+  Parameters: torque
+  Returns: (arm_angle, angular_velocity, angular_acceleration)
+
+- _get_observation(): Backward compatibility wrapper for observations method.
+  Returns: observation array
+
+- _get_information(): Backward compatibility wrapper for observations method.
+  Returns: information dictionary
+
+- reset(): Reset the environment to initial state.
+  Parameters: seed, options
+  Returns: (observation, information)
+  Resets all state variables and PID controller.
+
+- step(): Execute one time step in the environment.
+  Parameters: action
+  Returns: (observation, reward, terminated, truncated, information)
+  
+  Process:
+  1. Process action to get torque
+  2. Integrate dynamics
+  3. Calculate reward
+  4. Check termination conditions
+  5. Generate observation and info
+
+- _calculate_reward(): Calculate reward based on control mode.
+  Returns: float reward value
+  
+  For force mode: Rewards grip quality, penalizes force instability and energy use
+  For other modes: Penalizes tracking error and torque usage
+
+- render(): Render the current state.
+  Returns: None or RGB array
+  Delegates to Rendering component.
+
+- close(): Clean up resources.
+  Closes pygame display and quits pygame.
+
+
+================================================================================
+TEST FILES
+================================================================================
+
+15. comprehensive_test.py
+--------------------------
+Role: Comprehensive testing of position and velocity control modes.
+
+Functions:
+- test_position_control(): Test position control tracking performance.
+  Returns: (avg_error, max_error)
+  Runs 500 steps, tracks theta vs target, plots results, saves to 'position_control_test.png'
+
+- test_velocity_control(): Test velocity control tracking performance.
+  Returns: (avg_error, max_error)
+  Runs 500 steps, tracks both angle and velocity, plots results, saves to 'velocity_control_test.png'
+
+- main (implicit in __main__): Runs both tests and prints summary statistics.
+
+
+16. double_pendulum_simulation.py
+----------------------------------
+Role: Simulates and animates a double pendulum system (separate from main robotic arm).
+
+Functions:
+- double_pendulum_derivatives(): Compute derivatives of double pendulum state.
+  Parameters: state, t, L1, L2, m1, m2, g
+  Returns: [dtheta1/dt, domega1/dt, dtheta2/dt, domega2/dt]
+  Uses Lagrangian mechanics to compute angular accelerations.
+
+- simulate_double_pendulum(): Simulate the double pendulum motion.
+  Parameters: initial_state, t, L1, L2, m1, m2, g
+  Returns: solution array with columns [theta1, omega1, theta2, omega2]
+  Uses scipy.integrate.odeint for numerical integration.
+
+- animate_double_pendulum(): Animate the double pendulum motion.
+  Parameters: solution, t, L1, L2
+  Creates matplotlib animation with trail effect for second pendulum.
+
+- main(): Main function to run simulation.
+  Sets parameters, initial conditions, runs simulation, and creates animation.
+
+
+17. generate_tracking_plots.py
+-------------------------------
+Role: Post-processing tool to generate tracking plots from existing CSV files.
+
+Functions:
+- generate_tracking_plot_from_csv(): Generate tracking plots from existing CSV data.
+  Parameters: csv_file (Path object)
+  Reads CSV, extracts theta and theta_target, calculates errors, generates plot with
+  statistics, saves to plots/ directory.
+
+- main(): Generate tracking plots for all CSV files.
+  Searches runs/ directory for CSV files and processes each one.
+
+
+18. test_plot_generation.py
+----------------------------
+Role: Unit test for the plot_tracking_performance function.
+
+Functions:
+- main (implicit in script): Creates test data with synthetic sine wave tracking,
+  calls plot_tracking_performance(), saves to plots/test/ directory.
+
+
+19. test_tracking.py
+--------------------
+Role: Integration test for tracking performance with visualization.
+
+Functions:
+- run_tracking_test(): Run tracking test and generate plots.
+  Creates environment, runs 200 steps of position control, generates two plots:
+  1. Full tracking performance plot with error statistics
+  2. Detailed view of a time segment (steps 50-150) with markers
+  
+  Saves plots to plots/ directory with timestamps.
+
+- main (implicit in __main__): Calls run_tracking_test().
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+The codebase is organized into:
+
+1. ENVIRONMENT MODULE: Core Gymnasium environment with modular components
+   - Base environment class with physics parameters
+   - Actions: PID control and torque conversion
+   - Dynamics: Physics integration with gravity and damping
+   - Kinematics: Forward kinematics and trajectory generation
+   - Observations: State vector and info dict generation
+   - Rendering: Pygame visualization with T-shaped joints
+
+2. SIMULATION MODULE: Execution and data logging infrastructure
+   - Arguments: CLI argument parsing
+   - Runner: Main simulation loop with action generation
+   - Logging: CSV/JSON episode data persistence
+   - Visualization: Matplotlib plotting utilities
+
+3. TOP-LEVEL INTEGRATION:
+   - run_sim.py: CLI entry point
+   - soft_robotic_env.py: Complete environment integrating all components
+
+4. TESTING & UTILITIES:
+   - comprehensive_test.py: Control mode validation
+   - test_tracking.py: Tracking performance analysis
+   - generate_tracking_plots.py: Post-processing visualization
+   - test_plot_generation.py: Plot function unit test
+   - double_pendulum_simulation.py: Separate physics demo
+
+The system supports four control modes: position (PID), velocity, acceleration,
+and direct force control, with comprehensive logging and visualization capabilities.
