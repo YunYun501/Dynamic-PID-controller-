@@ -1,0 +1,187 @@
+PYGAME RENDERING GEOMETRY REFERENCE
+====================================
+
+This file contains the pygame rendering code for the T-shaped robotic arm joint.
+Use this as reference when rebuilding the visualization component.
+
+RENDERING SETUP
+---------------
+```python
+import pygame
+from pygame import gfxdraw
+import numpy as np
+
+# Initialize display
+pygame.init()
+screen_dimension = 600
+screen = pygame.display.set_mode((screen_dimension, screen_dimension))
+clock = pygame.time.Clock()
+surface = pygame.Surface((screen_dimension, screen_dimension))
+surface.fill((255, 255, 255))  # White background
+```
+
+COORDINATE SYSTEM
+-----------------
+```python
+# World -> screen mapping
+boundary = 2.2  # World space boundary
+scale = screen_dimension / (boundary * 2)
+offset_x = screen_dimension // 2  # Center horizontally
+pivot_y_fraction = 0.15  # Pivot at 15% from top
+offset_y = int(screen_dimension * pivot_y_fraction)
+```
+
+T-SHAPE DIMENSIONS
+------------------
+```python
+# Common dimensions for both T-shapes
+t_width = 0.3 * scale      # Half-width of horizontal bar
+t_height = 0.4 * scale     # Height of vertical bar
+t_thickness = 0.1 * scale  # Thickness of bars
+```
+
+FIXED UPPER T-SHAPE (BASE)
+---------------------------
+Color: Gray (100, 100, 100)
+Position: Fixed at offset_x, offset_y
+
+```python
+# Horizontal bar of upper T
+horizontal_bar = [
+    (int(offset_x - t_width), int(offset_y - t_thickness)),
+    (int(offset_x - t_width), int(offset_y + t_thickness)),
+    (int(offset_x + t_width), int(offset_y + t_thickness)),
+    (int(offset_x + t_width), int(offset_y - t_thickness))
+]
+gfxdraw.aapolygon(surface, horizontal_bar, (100, 100, 100))
+gfxdraw.filled_polygon(surface, horizontal_bar, (100, 100, 100))
+
+# Vertical bar of upper T
+vertical_bar = [
+    (int(offset_x - t_thickness), int(offset_y)),
+    (int(offset_x - t_thickness), int(offset_y + t_height)),
+    (int(offset_x + t_thickness), int(offset_y + t_height)),
+    (int(offset_x + t_thickness), int(offset_y))
+]
+gfxdraw.aapolygon(surface, vertical_bar, (100, 100, 100))
+gfxdraw.filled_polygon(surface, vertical_bar, (100, 100, 100))
+```
+
+DYNAMIC LOWER T-SHAPE (ROTATING ARM)
+-------------------------------------
+Color: Red-ish (204, 77, 77)
+Position: Rotates around connection_y based on arm_angle
+Connection point: Bottom of upper T's vertical bar
+
+```python
+# Connection point
+connection_y = offset_y + t_height
+
+# Define T-shape in local coordinates (before rotation)
+# Horizontal bar of lower T (flipped)
+horizontal_coords = [
+    pygame.math.Vector2(-t_width, t_height),
+    pygame.math.Vector2(-t_width, t_height + t_thickness),
+    pygame.math.Vector2(t_width, t_height + t_thickness),
+    pygame.math.Vector2(t_width, t_height)
+]
+
+# Vertical bar of lower T (pointing upward, flipped along X-axis)
+vertical_coords = [
+    pygame.math.Vector2(-t_thickness, t_height),
+    pygame.math.Vector2(-t_thickness, 0),
+    pygame.math.Vector2(t_thickness, 0),
+    pygame.math.Vector2(t_thickness, t_height)
+]
+
+# Rotate and translate based on arm_angle
+def rotate_and_translate(coords, angle, offset_x, offset_y):
+    rotated = []
+    for coord in coords:
+        rotated_coord = coord.rotate_rad(angle)
+        rotated_coord.x += offset_x
+        rotated_coord.y += offset_y
+        rotated.append((int(rotated_coord.x), int(rotated_coord.y)))
+    return rotated
+
+rotated_horizontal = rotate_and_translate(horizontal_coords, arm_angle, offset_x, connection_y)
+rotated_vertical = rotate_and_translate(vertical_coords, arm_angle, offset_x, connection_y)
+
+# Draw the rotated lower T
+gfxdraw.aapolygon(surface, rotated_horizontal, (204, 77, 77))
+gfxdraw.filled_polygon(surface, rotated_horizontal, (204, 77, 77))
+gfxdraw.aapolygon(surface, rotated_vertical, (204, 77, 77))
+gfxdraw.filled_polygon(surface, rotated_vertical, (204, 77, 77))
+```
+
+TARGET POSITION MARKER
+-----------------------
+Color: Green (0, 180, 0)
+Shows where the arm should be pointing
+
+```python
+# Calculate target position of end of lower T
+target_end_x = offset_x + t_height * np.sin(theta_reference)
+target_end_y = connection_y + t_height * np.cos(theta_reference)
+radius = max(2, int(0.07 * scale))
+
+gfxdraw.aacircle(surface, int(target_end_x), int(target_end_y), radius, (0, 180, 0))
+gfxdraw.filled_circle(surface, int(target_end_x), int(target_end_y), radius, (0, 180, 0))
+```
+
+TORQUE INDICATOR
+----------------
+Shows applied torque as a colored circle at the pivot
+
+```python
+# Torque indicator (when no image available)
+if torque_applied is not None:
+    radius = int(0.1 * scale + 0.3 * scale * min(abs(torque_applied) / (maximum_torque + 1e-8), 1.0))
+    color = (220, 80, 80) if torque_applied >= 0 else (80, 120, 220)  # Red=CW, Blue=CCW
+    gfxdraw.aacircle(surface, int(offset_x), int(connection_y), max(2, int(radius)), color)
+```
+
+CONNECTION POINT (PIVOT)
+-------------------------
+Color: Black (0, 0, 0)
+Small circle at the joint
+
+```python
+pivot_radius = int(0.05 * scale)
+gfxdraw.aacircle(surface, int(offset_x), int(connection_y), pivot_radius, (0, 0, 0))
+gfxdraw.filled_circle(surface, int(offset_x), int(connection_y), pivot_radius, (0, 0, 0))
+```
+
+RENDER LOOP
+-----------
+```python
+# Blit to screen
+screen.blit(surface, (0, 0))
+
+# For "human" render mode
+pygame.event.pump()
+clock.tick(50)  # 50 FPS (metadata["render_fps"])
+pygame.display.flip()
+
+# For "rgb_array" render mode
+# Return: np.transpose(np.array(pygame.surfarray.pixels3d(screen)), axes=(1, 0, 2))
+```
+
+GEOMETRY NOTES
+--------------
+1. The T-shapes are designed to connect at their tips (bottom of upper T to top of lower T)
+2. The lower T is "flipped" along the X-axis compared to the upper T
+3. Rotation is applied using pygame.math.Vector2.rotate_rad() which rotates around origin
+4. After rotation, coordinates are translated to the connection point
+5. The arm_angle is measured in radians (0 = vertical downward, positive = clockwise)
+6. Anti-aliasing is used for smooth edges (aapolygon, aacircle)
+
+COLOR SCHEME
+------------
+- Upper T (base): Gray (100, 100, 100)
+- Lower T (arm): Red-ish (204, 77, 77)
+- Target marker: Green (0, 180, 0)
+- Torque CW: Red (220, 80, 80)
+- Torque CCW: Blue (80, 120, 220)
+- Pivot point: Black (0, 0, 0)
+- Background: White (255, 255, 255)

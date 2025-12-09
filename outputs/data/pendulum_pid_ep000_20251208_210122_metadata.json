@@ -1,0 +1,53 @@
+{
+  "experiment_name": "pendulum_pid",
+  "episode": 0,
+  "timestamp": "20251208_210122",
+  "config": {
+    "name": "pendulum_pid",
+    "physics": {
+      "arm_length": 1.0,
+      "arm_mass": 1.0,
+      "base_mass": 0.5,
+      "moment_of_inertia": 1.0,
+      "gravity": 9.81,
+      "damping_coefficient": 0.1,
+      "friction_coefficient": 0.05,
+      "max_torque": 10.0,
+      "max_angle": 3.141592653589793,
+      "max_velocity": 10.0
+    },
+    "pid": {
+      "kp": 100.0,
+      "ki": 10.0,
+      "kd": 20.0,
+      "integral_limit": 1.0,
+      "derivative_filter_tau": 0.0
+    },
+    "simulation": {
+      "dt": 0.01,
+      "max_steps": 200,
+      "control_mode": "position",
+      "include_pid_gains": false,
+      "initial_angle": 0.0,
+      "initial_velocity": 0.0,
+      "random_initial_state": false
+    },
+    "render": {
+      "screen_size": 600,
+      "render_mode": null,
+      "fps": 50,
+      "pivot_y_fraction": 0.15
+    },
+    "logging": {
+      "output_dir": "outputs",
+      "log_frequency": 1,
+      "save_video": false,
+      "auto_plot": false
+    }
+  },
+  "num_steps": 200,
+  "final_error": -0.00586768248237321,
+  "mean_error": 0.03078034231118462,
+  "max_torque": 10.0,
+  "log_frequency": 1
+}

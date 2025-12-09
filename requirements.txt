@@ -1,0 +1,8 @@
+﻿# Python dependencies for the adaptive PID pendulum project
+numpy
+pandas
+matplotlib
+gymnasium
+pygame
+scipy
+pytest
